@@ -402,8 +402,7 @@ error."
 ;; Use this when testing the basic storage engine.
 ;; Set up for easy space for your C-x C-e execution pleasure.
 (when nil
-      (set url-basic-auth-storage nil)
-      )
+  (set url-basic-auth-storage nil))
 
 ;;* custom
 (defgroup twit nil
@@ -769,12 +768,12 @@ AS WELL.  Otherwise your primary login credentials may get wacked."
 ;; statuses
 (defconst twit-update-url
   (concat twit-base-url "/statuses/update.xml"))
-(defconst twit-puplic-timeline-file
+(defconst twit-public-timeline-file
   (concat twit-base-url "/statuses/public_timeline.xml?page=%s"))
 (defconst twit-friend-timeline-file
   (concat twit-base-url "/statuses/friends_timeline.xml?page=%s"))
 (defconst twit-followers-list-url
-  (concat twit-base-url "/statuses/followers.xml?page=%s"))
+  (concat twit-base-url "/statuses/followers.xml?cursor=%s"))
 (defconst twit-friend-list-url
   (concat twit-base-url "/statuses/friends.xml"))
 (defconst twit-mentions-url
@@ -2015,6 +2014,16 @@ With a numeric prefix argument, it will skip to that PAGE like `twit-show-recent
 ;; minor modes might be a cause of the memoryleak, see about removing them
 ;; this is too delicate, depending on the order of the xml elements, and not
 ;; the actual xml elements.
+
+(defun get-followers-multipaged (page cursor acc)
+  (let* ((userinfo (cadr (twit-parse-xml (format twit-followers-list-url-mp page cursor) "GET")))
+         (users (xml-get-children
+                 (car (xml-get-children userinfo 'users))
+                 'user))
+         (next-cursor (third (car (xml-get-children userinfo 'next_cursor)))))
+    (if (equalp next-cursor "0") (concatenate 'list acc users)
+        (get-followers-multipaged page next-cursor (concatenate 'list acc users)))))
+
 ;;;###autoload
 (defun twit-show-followers (&optional page)
   "Display a list of all your twitter.com followers' names."
@@ -2024,19 +2033,21 @@ With a numeric prefix argument, it will skip to that PAGE like `twit-show-recent
    (with-twit-buffer "*Twit-followers*"
      (twit-write-title "Followers\n")
      (loop for name in
-           (loop for name in
-                 (loop for user in
-                       (xml-get-children
-                        (cadr (twit-parse-xml (format twit-followers-list-url page) "GET")) 'user)
-                       collect (eighth user))
-                 collect (third name))
-           for i upfrom 1
-           do (insert (propertize (format "%s\n" name)
-                                  'face
-                                  (if (= 0 (% i 2))
-                                      "twit-zebra-1-face"
-                                      "twit-zebra-2-face")
-                                  'twit-user name))))))
+          (loop for name in
+               (loop for user in
+                    (if nil
+                        (xml-get-children
+                         (cadr (twit-parse-xml (format twit-followers-list-url page) "GET")) 'user)
+                        (get-followers-multipaged page "-1" nil))
+                  collect (eighth user))
+             collect (third name))
+        for i upfrom 1
+        do (insert (propertize (format "%s\n" name)
+                               'face
+                               (if (= 0 (% i 2))
+                                   "twit-zebra-1-face"
+                                   "twit-zebra-2-face")
+                               'twit-user name))))))
 
 (defalias 'twit-list-followers 'twit-show-followers
   "The name twit-list-followers is deprecated.  Use `twit-show-followers' instead.")
